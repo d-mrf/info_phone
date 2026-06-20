@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MRF Technology — Device Inspector</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#080808;--surface:#101010;--card:#161616;--border:#222;
+      --gold:#C9942A;--gold2:#E5B84A;--green:#3ecf8e;--red:#e05252;
+      --text:#E8E4DC;--muted:#666;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+    }
+    body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+
+    /* scan lines */
+    body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.08) 3px,rgba(0,0,0,.08) 4px);pointer-events:none;z-index:9999}
+
+    /* topbar */
+    .topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 32px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:100}
+    .logo{font-family:var(--mono);font-size:13px;color:var(--gold);letter-spacing:.1em}
+    .logo span{color:var(--text)}
+    .live-dot{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--green)}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(62,207,142,.5)}50%{box-shadow:0 0 0 6px rgba(62,207,142,0)}}
+
+    /* hero */
+    .hero{padding:52px 32px 32px;max-width:860px;margin:0 auto}
+    .eyebrow{font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:.2em;text-transform:uppercase;margin-bottom:14px}
+    .hero h1{font-size:clamp(28px,5vw,52px);font-weight:700;letter-spacing:-.02em;line-height:1.1;margin-bottom:10px}
+    .hero h1 em{font-style:normal;color:var(--gold)}
+    .hero p{font-size:13px;color:var(--muted);max-width:480px}
+
+    /* grid */
+    .grid{max-width:860px;margin:0 auto;padding:0 32px 60px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:620px){.grid{grid-template-columns:1fr;padding:0 18px 40px}.hero{padding:36px 18px 24px}.topbar{padding:12px 18px}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:3px;padding:22px;transition:border-color .2s}
+    .card:hover{border-color:var(--gold)}
+    .card.full{grid-column:1/-1}
+    .card-label{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+    .card-label .tag{background:var(--border);padding:2px 8px;border-radius:2px;font-size:9px}
+
+    /* rows */
+    .row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;gap:10px}
+    .row:last-child{border:none}
+    .row .k{color:var(--muted);font-family:var(--mono);font-size:11px;flex-shrink:0;min-width:130px}
+    .row .v{color:var(--text);text-align:left;word-break:break-all;font-family:var(--mono);font-size:12px}
+    .row .v.ok{color:var(--green)}
+    .row .v.warn{color:#e0a040}
+    .row .v.danger{color:var(--red)}
+    .row .v.gold{color:var(--gold2)}
+
+    /* big stat */
+    .big-stat{text-align:center;padding:10px 0 4px}
+    .big-num{font-family:var(--mono);font-size:48px;font-weight:700;color:var(--gold);line-height:1}
+    .big-unit{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+
+    /* battery bar */
+    .batt-wrap{margin-top:10px;height:16px;background:#1a1a1a;border:1px solid var(--border);border-radius:2px;overflow:hidden;position:relative}
+    .batt-fill{height:100%;border-radius:2px;transition:width 1s ease;background:var(--green)}
+    .batt-fill.mid{background:#e0a040}
+    .batt-fill.low{background:var(--red)}
+    .batt-pct{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--text)}
+
+    /* spinner */
+    .spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* loading */
+    .loading{color:var(--muted);font-family:var(--mono);font-size:12px;display:flex;align-items:center;gap:8px;padding:8px 0}
+
+    /* permissions banner */
+    .perm-banner{background:#1a1200;border:1px solid #3a2a00;border-radius:3px;padding:14px 18px;font-family:var(--mono);font-size:12px;color:#c89040;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+    .perm-banner svg{flex-shrink:0}
+
+    /* map frame */
+    #map-frame{width:100%;height:200px;border:none;border-radius:2px;margin-top:10px;background:#111;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:var(--mono);font-size:12px}
+
+    /* footer */
+    footer{border-top:1px solid var(--border);padding:20px 32px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);max-width:860px;margin:0 auto}
+    footer a{color:var(--gold);text-decoration:none}
+
+    /* refresh btn */
+    .refresh-btn{background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:2px;cursor:pointer;transition:all .2s}
+    .refresh-btn:hover{border-color:var(--gold);color:var(--gold)}
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">MRF <span>Technology</span></div>
+  <div class="live-dot"><div class="dot"></div> LIVE SCAN</div>
+</header>
+
+<div class="hero">
+  <p class="eyebrow">Device Inspector — Real-Time Data</p>
+  <h1>معلوماتك<br/><em>كاملة.</em></h1>
+  <p>كل ما يستطيع متصفحك الكشف عنه — مباشر، حقيقي، لحظي.</p>
+</div>
+
+<div class="grid">
+
+  <!-- NETWORK -->
+  <div class="card full">
+    <div class="card-label">🌐 الشبكة والعنوان <button class="refresh-btn" onclick="loadIP()">↻ تحديث</button></div>
+    <div id="net-rows"><div class="loading"><span class="spinner"></span>جاري جلب بيانات الشبكة…</div></div>
+  </div>
+
+  <!-- DEVICE -->
+  <div class="card">
+    <div class="card-label">📱 الجهاز والنظام</div>
+    <div id="dev-rows"></div>
+  </div>
+
+  <!-- SCREEN -->
+  <div class="card">
+    <div class="card-label">🖥️ الشاشة</div>
+    <div id="scr-rows"></div>
+  </div>
+
+  <!-- BATTERY -->
+  <div class="card">
+    <div class="card-label">🔋 البطارية</div>
+    <div id="batt-section"><div class="loading"><span class="spinner"></span>جاري قراءة البطارية…</div></div>
+  </div>
+
+  <!-- TIME / LOCALE -->
+  <div class="card">
+    <div class="card-label">🕐 الوقت واللغة</div>
+    <div id="time-rows"></div>
+  </div>
+
+  <!-- PERFORMANCE -->
+  <div class="card">
+    <div class="card-label">⚡ الأداء والذاكرة</div>
+    <div id="perf-rows"></div>
+  </div>
+
+  <!-- LOCATION -->
+  <div class="card full">
+    <div class="card-label">📍 الموقع الجغرافي <button class="refresh-btn" onclick="getGeo()">↻ اطلب الإذن</button></div>
+    <div id="geo-section"><div class="perm-banner"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> اضغط "اطلب الإذن" للحصول على موقعك الدقيق — يستلزم موافقتك.</div></div>
+  </div>
+
+  <!-- HARDWARE -->
+  <div class="card full">
+    <div class="card-label">🔧 مواصفات الأجهزة المتاحة</div>
+    <div id="hw-rows"></div>
+  </div>
+
+  <!-- BROWSER -->
+  <div class="card full">
+    <div class="card-label">🔍 المتصفح والبيئة</div>
+    <div id="browser-rows"></div>
+  </div>
+
+</div>
+
+<footer>
+  <span>© 2025 MRF Technology — <a href="#">mrf-technology.io</a></span>
+  <span id="footer-time"></span>
+</footer>
+
+<script>
+// ─── helpers ───
+function row(k, v, cls=''){
+  return `<div class="row"><span class="k">${k}</span><span class="v ${cls}">${v||'غير متاح'}</span></div>`;
+}
+function na(v){ return v||'<span style="color:#444">—</span>'; }
+
+// ─── LIVE CLOCK ───
+function clock(){
+  const now = new Date();
+  document.getElementById('footer-time').textContent =
+    now.toLocaleTimeString('ar-SA', {hour12:false}) + ' | ' + now.toLocaleDateString('ar-SA');
+}
+setInterval(clock,1000); clock();
+
+// ─── DEVICE ───
+(function devInfo(){
+  const ua = navigator.userAgent;
+  const platform = navigator.userAgentData?.platform || navigator.platform || '—';
+  const mobile   = /Mobi|Android|iPhone|iPad/i.test(ua);
+  const os = (()=>{
+    if(/Windows NT 10/i.test(ua)) return 'Windows 10/11';
+    if(/Windows NT 6.3/i.test(ua)) return 'Windows 8.1';
+    if(/Mac OS X/i.test(ua)){const m=ua.match(/Mac OS X (\d+[_\.]\d+)/);return 'macOS '+(m?m[1].replace('_','.'):'');}
+    if(/Android/i.test(ua)){const m=ua.match(/Android ([\d.]+)/);return 'Android '+(m?m[1]:'');}
+    if(/iPhone|iPad/i.test(ua)){const m=ua.match(/OS ([\d_]+)/);return 'iOS '+(m?m[1].replace(/_/g,'.'):'');}
+    if(/Linux/i.test(ua)) return 'Linux';
+    return platform;
+  })();
+  const brand = navigator.userAgentData?.brands?.find(b=>!['Chromium','Not_A Brand','Not A;Brand','Not/A)Brand'].includes(b.brand));
+  const browser = brand ? `${brand.brand} ${brand.version}` : (()=>{
+    if(/Edg\//i.test(ua)) return 'Microsoft Edge';
+    if(/OPR|Opera/i.test(ua)) return 'Opera';
+    if(/Firefox/i.test(ua)) return 'Firefox';
+    if(/Chrome/i.test(ua)) return 'Chrome';
+    if(/Safari/i.test(ua)) return 'Safari';
+    return 'Unknown';
+  })();
+
+  let html = '';
+  html += row('نوع الجهاز',    mobile ? '📱 جوال' : '💻 حاسوب', mobile?'ok':'gold');
+  html += row('نظام التشغيل',  os, 'gold');
+  html += row('المتصفح',       browser, 'gold');
+  html += row('User Agent',    ua.substring(0,90)+'…');
+  html += row('اللمس (Touch)',  'ontouchstart' in window ? '✓ مدعوم':'✗ غير مدعوم', 'ontouchstart' in window?'ok':'warn');
+  html += row('Cookies',       navigator.cookieEnabled?'✓ مفعّل':'✗ معطّل', navigator.cookieEnabled?'ok':'danger');
+  document.getElementById('dev-rows').innerHTML = html;
+})();
+
+// ─── SCREEN ───
+(function scrInfo(){
+  const sw=screen.width, sh=screen.height;
+  const ww=window.innerWidth, wh=window.innerHeight;
+  const dpr=window.devicePixelRatio||1;
+  const depth=screen.colorDepth;
+  let html='';
+  html += row('دقة الشاشة',   `${sw} × ${sh} px`, 'gold');
+  html += row('نافذة المتصفح', `${ww} × ${wh} px`);
+  html += row('دقة البكسل',   `${dpr}x`, dpr>=2?'ok':'');
+  html += row('عمق الألوان',  `${depth} bit`);
+  html += row('الاتجاه',       window.innerWidth>window.innerHeight?'أفقي 🔲':'عمودي 📱');
+  document.getElementById('scr-rows').innerHTML = html;
+})();
+
+// ─── BATTERY ───
+async function loadBattery(){
+  const el = document.getElementById('batt-section');
+  if(!('getBattery' in navigator)){
+    el.innerHTML = row('البطارية','غير مدعومة في هذا المتصفح','warn'); return;
+  }
+  try{
+    const b = await navigator.getBattery();
+    function render(){
+      const pct = Math.round(b.level*100);
+      const cls  = pct>50?'':'pct>20?'mid':'low'';
+      const fillClass = pct>50?'':'mid':'low'';
+      // simpler:
+      const fClass = pct>50?'green':pct>20?'mid':'low';
+      const bColor  = pct>50?'':'';
+      let html = '';
+      html += `<div class="big-stat"><div class="big-num">${pct}</div><div class="big-unit">% شحن</div></div>`;
+      html += `<div class="batt-wrap"><div class="batt-fill ${fClass==='green'?'':fClass}" style="width:${pct}%;${fClass==='green'?'background:var(--green)':fClass==='mid'?'background:#e0a040':'background:var(--red)'}"></div><span class="batt-pct">${pct}%</span></div>`;
+      html += row('حالة الشحن', b.charging?'⚡ يشحن الآن':'🔋 يعمل على البطارية', b.charging?'ok':'warn');
+      if(!b.charging && b.dischargingTime!==Infinity)
+        html += row('الوقت المتبقي', `${Math.round(b.dischargingTime/60)} دقيقة`, pct<20?'danger':'');
+      if(b.charging && b.chargingTime!==Infinity)
+        html += row('وقت الشحن الكامل', `${Math.round(b.chargingTime/60)} دقيقة`, 'ok');
+      el.innerHTML = html;
+    }
+    render();
+    b.addEventListener('levelchange', render);
+    b.addEventListener('chargingchange', render);
+  }catch(e){el.innerHTML=row('البطارية','خطأ في القراءة','danger');}
+}
+loadBattery();
+
+// ─── TIME ───
+(function timeInfo(){
+  const now  = new Date();
+  const tz   = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const locale= navigator.language||'—';
+  const langs = (navigator.languages||[navigator.language]).join(', ');
+  let html='';
+  html += row('الوقت الحالي',   now.toLocaleTimeString('ar',{hour12:false}), 'gold');
+  html += row('التاريخ',         now.toLocaleDateString('ar'));
+  html += row('المنطقة الزمنية',tz,'gold');
+  html += row('إزاحة GMT',      `UTC${now.getTimezoneOffset()>0?'-':'+'}${Math.abs(now.getTimezoneOffset()/60)}`);
+  html += row('اللغة الأساسية', locale, 'ok');
+  html += row('اللغات المدعومة',langs);
+  document.getElementById('time-rows').innerHTML = html;
+
+  // live update time row every second
+  setInterval(()=>{
+    const rows = document.querySelectorAll('#time-rows .row');
+    if(rows[0]) rows[0].querySelector('.v').textContent = new Date().toLocaleTimeString('ar',{hour12:false});
+  },1000);
+})();
+
+// ─── PERFORMANCE ───
+(function perfInfo(){
+  const mem  = (performance.memory||{}).jsHeapSizeLimit;
+  const used = (performance.memory||{}).usedJSHeapSize;
+  const conn = navigator.connection||navigator.mozConnection||navigator.webkitConnection||{};
+  let html='';
+  html += row('نوع الاتصال',  conn.effectiveType||'—', conn.effectiveType==='4g'?'ok':conn.effectiveType==='3g'?'warn':'danger');
+  html += row('السرعة (Mbps)', conn.downlink!=null?conn.downlink+' Mbps':'—', 'gold');
+  html += row('التأخير (RTT)', conn.rtt!=null?conn.rtt+' ms':'—');
+  html += row('وضع توفير البيانات', conn.saveData?'✓ مفعّل':'✗ معطّل', conn.saveData?'warn':'ok');
+  if(mem) html += row('ذاكرة JS المحدودة', (mem/1048576).toFixed(1)+' MB');
+  if(used) html += row('ذاكرة JS المستخدمة', (used/1048576).toFixed(1)+' MB', 'warn');
+  document.getElementById('perf-rows').innerHTML = html;
+})();
+
+// ─── HARDWARE ───
+(function hwInfo(){
+  const cores = navigator.hardwareConcurrency||'—';
+  const mem   = navigator.deviceMemory||'—';
+  const gpu   = (()=>{
+    try{
+      const c=document.createElement('canvas');
+      const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+      if(!gl) return '—';
+      const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+      return dbg?gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL):'—';
+    }catch(e){return '—';}
+  })();
+  const gpuVendor=(()=>{
+    try{
+      const c=document.createElement('canvas');
+      const gl=c.getContext('webgl');
+      if(!gl) return '—';
+      const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+      return dbg?gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL):'—';
+    }catch(e){return '—';}
+  })();
+  let html='';
+  html += row('أنوية المعالج (CPU Cores)', cores+' core', 'gold');
+  html += row('ذاكرة الجهاز (RAM)', mem!=='—'?`${mem} GB`:'—', 'gold');
+  html += row('بطاقة الرسوميات (GPU)', gpu);
+  html += row('الشركة المصنعة (GPU)', gpuVendor);
+  html += row('WebGL دعم', gpu!=='—'?'✓ مدعوم':'✗ غير مدعوم', gpu!=='—'?'ok':'warn');
+  html += row('خيوط عمل (Worker Threads)', typeof Worker!=='undefined'?'✓ مدعومة':'✗', 'ok');
+  html += row('Service Worker', 'serviceWorker' in navigator?'✓ مدعوم':'✗', 'ok');
+  document.getElementById('hw-rows').innerHTML = html;
+})();
+
+// ─── BROWSER EXTRA ───
+(function brInfo(){
+  const plugins=[...navigator.plugins||[]].slice(0,5).map(p=>p.name).join(', ')||'—';
+  const java   = navigator.javaEnabled&&navigator.javaEnabled();
+  const pdf    = navigator.pdfViewerEnabled;
+  const darkMode = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const reduced  = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let html='';
+  html += row('إضافات المتصفح', plugins.substring(0,80)||'—');
+  html += row('Java', java?'✓':'✗', java?'warn':'ok');
+  html += row('PDF Viewer مدمج', pdf!=null?(pdf?'✓ نعم':'✗ لا'):'—', pdf?'ok':'');
+  html += row('الوضع المظلم', darkMode?'✓ مفعّل':'✗ معطّل', darkMode?'ok':'warn');
+  html += row('تقليل الحركة', reduced?'✓ مفعّل':'✗ معطّل');
+  html += row('Clipboard API', 'clipboard' in navigator?'✓':'✗', 'clipboard' in navigator?'ok':'');
+  html += row('Vibration API', 'vibrate' in navigator?'✓':'✗', 'vibrate' in navigator?'ok':'');
+  html += row('Speech API', 'speechSynthesis' in window?'✓':'✗', 'speechSynthesis' in window?'ok':'');
+  document.getElementById('browser-rows').innerHTML = html;
+})();
+
+// ─── IP / NETWORK (external API) ───
+async function loadIP(){
+  const el = document.getElementById('net-rows');
+  el.innerHTML='<div class="loading"><span class="spinner"></span>جاري جلب عنوان IP والموقع من الشبكة…</div>';
+  try{
+    const r = await fetch('https://ipapi.co/json/');
+    const d = await r.json();
+    let html='';
+    html += row('IP Address (IPv4)', `<span style="color:var(--gold2);font-size:16px;font-weight:700">${d.ip||'—'}</span>`);
+    html += row('ISP / المزود',      na(d.org));
+    html += row('ASN',               na(d.asn));
+    html += row('الدولة',            `${d.country_name||'—'} ${d.country_code?'('+d.country_code+')':''}`,'gold');
+    html += row('المدينة',           na(d.city),'gold');
+    html += row('المنطقة',           na(d.region));
+    html += row('الرمز البريدي',     na(d.postal));
+    html += row('المنطقة الزمنية',   na(d.timezone));
+    html += row('إحداثيات IP',       d.latitude&&d.longitude?`${d.latitude}, ${d.longitude}`:'—');
+    html += row('نوع IP',            d.version||'IPv4');
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div class="loading" style="color:var(--red)">⚠ تعذّر الاتصال بـ API — تحقق من الشبكة.</div>';
+  }
+}
+loadIP();
+
+// ─── GEOLOCATION ───
+function getGeo(){
+  const el=document.getElementById('geo-section');
+  el.innerHTML='<div class="loading"><span class="spinner"></span>في انتظار إذنك…</div>';
+  if(!navigator.geolocation){
+    el.innerHTML='<div style="color:var(--red);font-family:var(--mono);font-size:12px">المتصفح لا يدعم تحديد الموقع.</div>';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const {latitude:lat,longitude:lng,accuracy,altitude,speed,heading}=pos.coords;
+      let html='';
+      html+=row('خط العرض (Latitude)',  lat.toFixed(6),'gold');
+      html+=row('خط الطول (Longitude)', lng.toFixed(6),'gold');
+      html+=row('الدقة (Accuracy)',     `±${Math.round(accuracy)} متر`, accuracy<100?'ok':'warn');
+      html+=row('الارتفاع',             altitude!=null?`${Math.round(altitude)} م`:'—');
+      html+=row('السرعة',               speed!=null?`${(speed*3.6).toFixed(1)} كم/ساعة`:'—');
+      html+=row('الاتجاه',              heading!=null?`${Math.round(heading)}°`:'—');
+      html+=`<div id="map-frame" style="background:#111;display:flex;align-items:center;justify-content:center">
+        <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=15/${lat}/${lng}" target="_blank"
+           style="font-family:var(--mono);font-size:12px;color:var(--gold);text-decoration:none">
+          📍 عرض موقعك على الخريطة ← (${lat.toFixed(4)}, ${lng.toFixed(4)})
+        </a></div>`;
+      el.innerHTML=html;
+    },
+    err=>{
+      const msgs={1:'رفضت الإذن بتحديد الموقع.',2:'تعذّر تحديد الموقع.',3:'انتهت مهلة الطلب.'};
+      el.innerHTML=`<div style="color:var(--red);font-family:var(--mono);font-size:12px">⚠ ${msgs[err.code]||err.message}</div>`;
+    },
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+  );
+}
+</script>
+</body>
+</html>
